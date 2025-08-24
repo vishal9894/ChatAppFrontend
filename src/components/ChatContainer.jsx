@@ -1,164 +1,270 @@
-import React, { useRef, useState, useEffect } from 'react'
-import assets, { messagesDummyData } from '../assets/chat-app-assets/assets'
-import { formatMessageTime } from '../lib/utils'
+import React, { useRef, useState, useEffect, useContext, useCallback } from "react";
+import assets from "../assets/chat-app-assets/assets";
+import { formatMessageTime } from "../lib/utils";
+import { ChatContext } from "../../context/ChatContext";
+import { AuthContext } from "../../context/AuthContext";
 
-const ChatContainer = ({ selectedUser, setselectedUser }) => {
-  const scrollEnd = useRef()
-  const [message, setMessage] = useState('')
+const ChatContainer = () => {
+  const scrollEnd = useRef();
+  const [message, setMessage] = useState("");
+  const [image, setImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const fileInputRef = useRef(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Auto-scroll to bottom when messages change
+  const { selectedUser, setSelectedUser, messages, sendMessage, getMessages } =
+    useContext(ChatContext);
+  const { authUser, onlineUsers } = useContext(AuthContext);
+
+  // Auto scroll
   useEffect(() => {
     if (scrollEnd.current) {
-      scrollEnd.current.scrollIntoView({ behavior: "smooth" })
+      scrollEnd.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messagesDummyData])
+  }, [messages]);
 
-  const handleSendMessage = () => {
-    if (message.trim() !== '') {
-      // In a real app, you would send the message to your backend here
-      console.log("Sending message:", message)
-      setMessage('')
+  // Fetch messages when user changes
+  const fetchMessages = useCallback(async () => {
+    if (selectedUser && getMessages) {
+      setIsLoading(true);
+      try {
+        await getMessages(selectedUser._id);
+      } catch (error) {
+        console.error("Error fetching messages:", error);
+      } finally {
+        setIsLoading(false);
+      }
     }
-  }
+  }, [selectedUser, getMessages]);
+
+  useEffect(() => {
+    fetchMessages();
+  }, [selectedUser?._id]);
+
+  // Send Message
+  const handleSendMessage = async () => {
+    if ((message.trim() !== "" || image) && sendMessage) {
+      try {
+        await sendMessage(selectedUser._id, {
+          text: message.trim(),
+          image: imagePreview,
+        });
+        setMessage("");
+        setImage(null);
+        setImagePreview(null);
+      } catch (error) {
+        console.error("Failed to send message:", error);
+      }
+    }
+  };
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleSendMessage()
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
-  }
+  };
+
+  const handleImageSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("File too large (max 5MB).");
+      return;
+    }
+
+    setImage(file);
+    const reader = new FileReader();
+    reader.onload = (e) => setImagePreview(e.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => {
+    setImage(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const isOnline =
+    selectedUser && onlineUsers && onlineUsers.includes(selectedUser._id);
 
   return selectedUser ? (
-    <div className='h-full flex flex-col bg-gradient-to-br from-[#0f0b2e] to-[#1f1b45]'>
+    <div className="h-full flex flex-col bg-gradient-to-br from-[#0d0b28] to-[#1b1640]">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 bg-gradient-to-r from-[#1a163c]/80 to-[#2a245c]/80 backdrop-blur-md border-b border-[#ffffff15]">
+      <div className="flex items-center justify-between p-4 border-b border-white/10 bg-black/20 backdrop-blur">
         <div className="flex items-center gap-3">
           <div className="relative">
-            <img 
-              src={assets.profile_martin} 
-              alt="Profile" 
-              className='w-10 h-10 rounded-full object-cover border-2 border-purple-500/50 shadow-lg' 
+            <img
+              src={selectedUser.profilePic || assets.avatar_icon}
+              alt="Profile"
+              className="w-10 h-10 rounded-full object-cover border-2 border-purple-500/50"
             />
-            <span className='absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-2 border-[#1a163c]'></span>
+            <span
+              className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-[#1a163c] ${
+                isOnline ? "bg-green-500" : "bg-gray-500"
+              }`}
+            ></span>
           </div>
           <div>
-            <p className='text-white font-semibold'>Vishal</p>
-            <p className='text-xs text-green-400 flex items-center gap-1'>
-              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-              Online
+            <p className="text-white font-semibold">
+              {selectedUser.fullName || "Unknown User"}
+            </p>
+            <p
+              className={`text-xs ${
+                isOnline ? "text-green-400" : "text-gray-400"
+              }`}
+            >
+              {isOnline ? "Online" : "Offline"}
             </p>
           </div>
         </div>
-        
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setselectedUser(null)} 
-            className="p-2 rounded-full hover:bg-[#ffffff15] transition-all duration-200 md:hidden"
-          >
-            <img src={assets.arrow_icon} alt="Back" className='w-5 h-5 opacity-80' />
-          </button>
-          <button className="p-2 rounded-full hover:bg-[#ffffff15] transition-all duration-200">
-            <img src={assets.help_icon} alt="Help" className='w-5 h-5 opacity-80' />
-          </button>
-        </div>
+        <button
+          onClick={() => setSelectedUser(null)}
+          className="p-2 rounded-full hover:bg-white/10 md:hidden"
+        >
+          <img src={assets.arrow_icon} alt="Back" className="w-5 h-5" />
+        </button>
       </div>
-      
-      {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto p-4 bg-chat-pattern">
-        <div className="flex flex-col gap-4 pb-4">
-          {messagesDummyData.map((msg, index) => {
-            const isCurrentUser = msg.senderId === '985959dkf443'
-            
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-full text-purple-400">
+            Loading messages...
+          </div>
+        ) : messages && messages.length > 0 ? (
+          messages.map((msg, index) => {
+            const isCurrentUser = msg.senderId === authUser._id;
+
             return (
-              <div 
-                key={index} 
-                className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'} animate-fadeIn`}
+              <div
+                key={msg._id || index}
+                className={`flex ${isCurrentUser ? "justify-end" : "justify-start"}`}
               >
-                <div className={`flex gap-3 max-w-xs lg:max-w-md ${isCurrentUser ? 'flex-row-reverse' : ''}`}>
-                  {/* Avatar */}
-                  <div className="flex flex-col items-end justify-end">
-                    <img 
-                      src={isCurrentUser ? assets.profile_martin : assets.avatar_icon} 
-                      alt="Avatar" 
-                      className='w-8 h-8 rounded-full object-cover border-2 border-[#ffffff20]' 
+                <div
+                  className={`flex flex-col max-w-xs lg:max-w-md ${
+                    isCurrentUser ? "items-end" : "items-start"
+                  }`}
+                >
+                  {/* Image */}
+                  {msg.image && (
+                    <img
+                      src={msg.image}
+                      alt="Shared"
+                      className="max-w-xs rounded-2xl border border-white/10 shadow-md mb-1"
                     />
-                  </div>
-                  
-                  {/* Message Content */}
-                  <div className="flex flex-col">
-                    {msg.image ? (
-                      <div className={`mb-1 ${isCurrentUser ? 'text-right' : 'text-left'}`}>
-                        <img 
-                          src={msg.image} 
-                          alt="Shared" 
-                          className='max-w-full md:max-w-xs rounded-2xl border border-[#ffffff15] shadow-md' 
-                        />
-                      </div>
-                    ) : (
-                      <div className={`p-3 rounded-2xl shadow-md ${isCurrentUser 
-                        ? 'bg-gradient-to-r from-purple-600 to-blue-600 rounded-br-md' 
-                        : 'bg-[#2a245c] border border-[#ffffff15] rounded-bl-md'
-                      }`}>
-                        <p className="text-white text-sm leading-relaxed">{msg.text}</p>
-                      </div>
+                  )}
+
+                  {/* Text */}
+                  <div
+                    className={`p-3 rounded-2xl text-sm ${
+                      isCurrentUser
+                        ? "bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-br-md"
+                        : "bg-[#2a245c] text-gray-200 rounded-bl-md"
+                    }`}
+                  >
+                    {msg.text && msg.text.trim() !== "" ? (
+                      <p className="leading-relaxed">{msg.text}</p>
+                    ) : msg.image ? null : (
+                      <p className="italic opacity-70">Empty message</p>
                     )}
-                    
-                    {/* Timestamp */}
-                    <p className={`text-xs mt-1 px-1 ${isCurrentUser ? 'text-right text-purple-300' : 'text-left text-gray-400'}`}>
-                      {formatMessageTime(msg.createdAt)}
-                    </p>
                   </div>
+
+                  {/* Timestamp */}
+                  <span className="text-xs text-gray-400 mt-1">
+                    {formatMessageTime(msg.createdAt)}
+                  </span>
                 </div>
               </div>
-            )
-          })}
-          <div ref={scrollEnd}></div>
-        </div>
+            );
+          })
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full text-gray-400">
+            <img
+              src={assets.logo_icon}
+              alt="Logo"
+              className="w-16 h-16 opacity-50 mb-4"
+            />
+            <p>No messages yet. Start a conversation!</p>
+          </div>
+        )}
+        <div ref={scrollEnd}></div>
       </div>
-      
-      {/* Message Input */}
-      <div className="p-4 bg-gradient-to-r from-[#1a163c]/80 to-[#2a245c]/80 backdrop-blur-md border-t border-[#ffffff10]">
+
+      {/* Image Preview */}
+      {imagePreview && (
+        <div className="px-4 pt-2 relative">
+          <div className="bg-white/10 rounded-lg p-2 inline-block relative">
+            <img
+              src={imagePreview}
+              alt="Preview"
+              className="w-20 h-20 object-cover rounded-md"
+            />
+            <button
+              onClick={removeImage}
+              className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full text-white text-xs flex items-center justify-center"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Input */}
+      <div className="p-4 border-t border-white/10 bg-black/20 backdrop-blur">
         <div className="flex items-center gap-3">
-          <div className="flex-1 flex items-center bg-[#ffffff10] border border-[#ffffff15] px-4 rounded-full">
-            <input 
-              type="text" 
-              placeholder='Type a message...' 
+          <div className="flex-1 flex items-center bg-white/10 px-4 rounded-full">
+            <input
+              type="text"
+              placeholder="Type a message..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyPress={handleKeyPress}
-              className='flex-1 text-sm p-2 border-none rounded-lg outline-none text-white placeholder-gray-400 bg-transparent'
+              className="flex-1 text-sm p-2 text-white bg-transparent outline-none"
             />
-            <input type="file" id='image' accept='image/png, image/jpeg' hidden />
-            <label htmlFor="image" className="cursor-pointer">
-              <img src={assets.gallery_icon} alt="Attach image" className='w-5 opacity-80 hover:opacity-100 transition-opacity' />
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              hidden
+              onChange={handleImageSelect}
+            />
+            <label
+              htmlFor="image"
+              className="cursor-pointer ml-2 hover:opacity-100 opacity-70"
+            >
+              <img
+                src={assets.gallery_icon}
+                alt="Attach"
+                className="w-5 h-5"
+              />
             </label>
           </div>
-          <button 
+          <button
             onClick={handleSendMessage}
-            disabled={message.trim() === ''}
-            className="p-3 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+            disabled={(message.trim() === "" && !image) || isLoading}
+            className="p-3 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white disabled:opacity-50"
           >
-            <img src={assets.send_button} alt="Send" className='w-5 h-5' />
+            <img src={assets.send_button} alt="Send" className="w-5 h-5" />
           </button>
         </div>
       </div>
     </div>
   ) : (
     <div className="flex flex-col items-center justify-center gap-5 text-gray-400 bg-gradient-to-br from-[#0f0b2e] to-[#1f1b45] max-md:hidden p-8">
-      <div className="relative">
-        <div className="absolute -inset-6 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-full blur-xl"></div>
-        <img src={assets.logo_icon} alt="Logo" className='w-24 h-24 relative z-10' />
-      </div>
-      <h2 className='text-2xl font-bold text-white'>Chat Anytime, Anywhere</h2>
+      <img src={assets.logo_icon} alt="Logo" className="w-24 h-24 opacity-80" />
+      <h2 className="text-2xl font-bold text-white">Chat Anytime, Anywhere</h2>
       <p className="text-center text-gray-300 max-w-md">
-        Select a conversation from the sidebar to start messaging with your friends and colleagues.
+        Select a conversation to start chatting with friends and colleagues.
       </p>
-      <div className="mt-4 flex gap-2">
-        <div className="w-2 h-2 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '0ms' }}></div>
-        <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '200ms' }}></div>
-        <div className="w-2 h-2 rounded-full bg-purple-500 animate-bounce" style={{ animationDelay: '400ms' }}></div>
-      </div>
     </div>
-  )
-}
+  );
+};
 
-export default ChatContainer
+export default ChatContainer;

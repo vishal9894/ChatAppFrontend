@@ -12,12 +12,12 @@ const HomePage = () => {
         <div className="glass-effect rounded-3xl overflow-hidden h-[95%] w-full max-w-6xl flex relative shadow-2xl border border-[#ffffff10]">
           {/* Left Sidebar */}
           <div className="w-1/4 min-w-[280px] max-w-[350px] border-r border-[#ffffff10]">
-            <Sidebar selectedUser={selectedUser} setselectedUser={setselectedUser} />
+            <Sidebar  />
           </div>
           
           {/* Main Chat Area */}
           <div className="flex-1 flex w-full flex-col">
-            <ChatContainer selectedUser={selectedUser} setselectedUser={setselectedUser} />
+            <ChatContainer  />
           </div>
           
           {/* Right Sidebar */}
